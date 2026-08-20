@@ -43,7 +43,8 @@ set(EIGEN_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
 SET(SOURCE_DIR "src/pygcransac")
 # Tell cmake that headers are in alse in source_dir
-include_directories(${SOURCE_DIR}/include)
+include_directories(${SOURCE_DIR}/include
+                    lib/eccv2026/src/include)
 
 
 # Set header files for the library
@@ -58,19 +59,19 @@ file(GLOB_RECURSE SRCS_GCRANSAC
 
 # Generate python module
 add_subdirectory(lib/pybind11)
+add_library(eccv2026 SHARED IMPORTED)
+set_property(TARGET eccv2026 PROPERTY IMPORTED_LOCATION "${PROJECT_SOURCE_DIR}/lib/eccv2026/lib/libeccv2026.so")
 
 pybind11_add_module(pygcransac ${SOURCE_DIR}/src/bindings.cpp ${HDRS_GCRANSAC} ${SRCS_GCRANSAC})
-target_link_libraries(pygcransac PRIVATE  ${OpenCV_LIBS} Eigen3::Eigen)
+target_link_libraries(pygcransac PRIVATE  ${OpenCV_LIBS} Eigen3::Eigen eccv2026)
 install(TARGETS pygcransac DESTINATION .)
 
 add_library(${PROJECT_NAME} STATIC ${HDRS_GCRANSAC} ${SRCS_GCRANSAC})
 
 target_link_libraries(${PROJECT_NAME} 
 	${OpenCV_LIBS}
-)
-
-target_link_libraries (${PROJECT_NAME}
-	Eigen3::Eigen)
+	Eigen3::Eigen
+	eccv2026)
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 

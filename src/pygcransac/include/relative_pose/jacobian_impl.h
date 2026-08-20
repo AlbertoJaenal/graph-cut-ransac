@@ -182,6 +182,101 @@ class CameraJacobianAccumulator
         const double *weights;
 };
 
+template <typename LossFunction>
+class CameraFJacobianAccumulator {
+public:
+    CameraFJacobianAccumulator(
+            const cv::Mat& correspondences_,
+            const size_t* sample_,
+            const size_t& sample_size_,
+            const LossFunction &loss,
+            const double *w = nullptr) : 
+         correspondences(&correspondences_), 
+        sample(sample_), 
+        sample_size(sample_size_), 
+        loss_fn(loss), 
+        weights(w) {}
+
+    double residual(const CameraPose &pose, double f) const {
+        double cost = 0;
+        for (size_t i = 0; i < sample_size; ++i) {
+            size_t idx = (sample == nullptr) ? i : sample[i];
+            Eigen::Vector3d Xw(correspondences->at<double>(idx, 2), correspondences->at<double>(idx, 3), correspondences->at<double>(idx, 4));
+            Eigen::Vector3d Pc = pose.R() * Xw + pose.t;
+            
+            if (Pc(2) <= 0) continue;
+
+            Eigen::Vector2d p = Pc.head<2>() / Pc(2);
+            // Apply focal length (and other params if necessary)
+            Eigen::Vector2d proj(f * p.x(), f * p.y()); 
+            
+            Eigen::Vector2d obs(correspondences->at<double>(idx, 0), correspondences->at<double>(idx, 1));
+            double r2 = (proj - obs).squaredNorm();
+            double w = (weights) ? weights[i] : 1.0;
+            cost += w * loss_fn.loss(r2);
+        }
+        return cost;
+    }
+
+    size_t accumulate(const CameraPose &pose, double f,
+                      Eigen::Matrix<double, 7, 7> &JtJ,
+                      Eigen::Matrix<double, 7, 1> &Jtr) const {
+        size_t count = 0;
+        const Eigen::Matrix3d R = pose.R();
+
+        for (size_t i = 0; i < sample_size; ++i) {
+            size_t idx = (sample == nullptr) ? i : sample[i];
+            Eigen::Vector3d Xw(correspondences->at<double>(idx, 2), correspondences->at<double>(idx, 3), correspondences->at<double>(idx, 4));
+            Eigen::Vector3d Pc = R * Xw + pose.t;
+            
+            if (Pc(2) <= 0) continue;
+
+            const double inv_z   = 1.0 / Pc(2);
+            const double finv_z  = f * inv_z;
+            const double finv_z2 = finv_z * inv_z;
+            Eigen::Vector2d p_norm = Pc.head<2>() * inv_z;
+            Eigen::Vector2d obs(correspondences->at<double>(idx, 0), correspondences->at<double>(idx, 1));
+            Eigen::Vector2d r = (f * p_norm) - obs;
+            
+            double r2 = r.squaredNorm();
+            double weight = (weights ? weights[i] : 1.0) * loss_fn.weight(r2);
+            if (weight <= 0) continue;
+
+            // Jacobian w.r.t Pc (Projection part)
+            Eigen::Matrix<double, 2, 3> J_pc;
+            J_pc << finv_z, 0,      -Pc(0) * finv_z2,
+                    0,      finv_z, -Pc(1) * finv_z2;
+
+            // Full Jacobian [J_rot (2x3) | J_trans (2x3) | J_focal (2x1)]
+            Eigen::Matrix<double, 2, 7> J;
+            // Rotation (Local Parameterization: J_pc * -[Pc]x)
+            J.col(0) = J_pc * Eigen::Vector3d(0, -Pc(2), Pc(1));
+            J.col(1) = J_pc * Eigen::Vector3d(Pc(2), 0, -Pc(0));
+            J.col(2) = J_pc * Eigen::Vector3d(-Pc(1), Pc(0), 0);
+            // Translation
+            J.block<2, 3>(0, 3) = J_pc;
+            
+            // Focal Length jacobian (LINEAR parameterization)
+            // d(proj)/d(f) = d(f * p_norm) / d(f) = p_norm
+            J.col(6) = p_norm;
+
+            JtJ.noalias() += weight * J.transpose() * J;
+            Jtr.noalias() += weight * J.transpose() * r;
+            count++;
+        }
+        return count;
+    }
+
+    static constexpr size_t num_params = 7;
+
+private:
+    const cv::Mat* correspondences;
+    const size_t* sample;
+    const size_t sample_size;
+    const LossFunction &loss_fn;
+    const double *weights;
+};
+
 // Non-linear refinement of transfer error |x2 - pi(H*x1)|^2, parameterized by fixing H(2,2) = 1
 // I did some preliminary experiments comparing different error functions (e.g. symmetric and transfer)
 // as well as other parameterizations (different affine patches, SVD as in Bartoli/Sturm, etc)

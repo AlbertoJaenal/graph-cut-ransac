@@ -1,3 +1,15 @@
 [submodule "lib/pybind11"]
 	path = lib/pybind11
 	url = https://github.com/pybind/pybind11.git
+[submodule "testing_absolute/thirdparty/self-sca-ori"]
+	path = testing_absolute/thirdparty/self-sca-ori
+	url = https://github.com/bluedream1121/self-sca-ori.git
+[submodule "testing_absolute/thirdparty/S3Esti"]
+	path = testing_absolute/thirdparty/S3Esti
+	url = https://github.com/laoyandujiang/S3Esti.git
+[submodule "lib/PoseLib"]
+	path = lib/PoseLib
+	url = https://github.com/vlarsson/PoseLib.git
+[submodule "lib/eccv2026"]
+	path = lib/eccv2026
+	url = https://github.com/marcusvaltonen/eccv2026.git

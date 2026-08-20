@@ -42,6 +42,7 @@
 #include "estimators/radial_homography_estimator.h"
 #include "estimators/essential_estimator.h"
 #include "estimators/perspective_n_point_estimator.h"
+#include "estimators/perspective_n_point_f_estimator.h"
 #include "estimators/rigid_transformation_estimator.h"
 #include "estimators/linear_model_estimator.h"
 
@@ -53,6 +54,7 @@
 #include "estimators/solver_p3p.h"
 #include "estimators/solver_epnp_lm.h"
 #include "estimators/solver_pnp_bundle_adjustment.h"
+#include "estimators/solver_pnpf_bundle_adjustment.h"
 #include "estimators/solver_dls_pnp.h"
 #include "estimators/solver_essential_matrix_five_point_stewenius.h"
 #include "estimators/solver_essential_matrix_five_point_nister.h"
@@ -74,6 +76,14 @@
 #include "estimators/solver_siftp1p.h"
 #include "estimators/solver_siftp2p.h"
 #include "estimators/solver_up2p.h"
+#include "estimators/solver_up2p_eccv26.h"
+
+#include "estimators/solver_p4pf.h"
+#include "estimators/solver_p35pf.h"
+#include "estimators/solver_up3pf.h"
+#include "estimators/solver_up1psift.h"
+#include "estimators/solver_up1fac.h"
+#include "estimators/solver_up2pfori.h"
 
 namespace gcransac
 {
@@ -142,17 +152,53 @@ namespace gcransac
 			estimator::solver::PnPBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
 			DefaultPnPEstimator;
 
+		typedef estimator::PerspectiveNPointEstimator<estimator::solver::UP2PSolver, // The solver used for fitting a model to a minimal sample
+			estimator::solver::PnPBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
+			UP2PEstimator;
+
+		typedef estimator::PerspectiveNPointEstimator<estimator::solver::UP2PESolver, // The solver used for fitting a model to a minimal sample
+			estimator::solver::PnPBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
+			UP2PEEstimator;
+
+		typedef estimator::PerspectiveNPointEstimator<estimator::solver::UP1SIFTSolver, // The solver used for fitting a model to a minimal sample
+			estimator::solver::PnPBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
+			UP1SIFTEstimator;
+
 		typedef estimator::PerspectiveNPointEstimator<estimator::solver::SIFTP1PSolver, // The solver used for fitting a model to a minimal sample
 			estimator::solver::PnPBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
 			SIFTP1PEstimator;
 
-		typedef estimator::PerspectiveNPointEstimator<estimator::solver::P1ACQuerySolver, // The solver used for fitting a model to a minimal sample
+		// typedef estimator::PerspectiveNPointEstimator<estimator::solver::P1ACQuerySolver, // The solver used for fitting a model to a minimal sample
+		// 	estimator::solver::PnPBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
+		// 	ACP1PEstimator_Q;
+
+		typedef estimator::PerspectiveNPointEstimator<estimator::solver::ACP1PCayleySolver, // The solver used for fitting a model to a minimal sample
 			estimator::solver::PnPBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
-			ACP1PEstimator;
+			ACP1PEstimator_C;
 
 		typedef estimator::PerspectiveNPointEstimator<estimator::solver::SIFTP2PQuerySolver, // The solver used for fitting a model to a minimal sample
 			estimator::solver::PnPBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
 			SIFTP2PEstimator;
+			
+		typedef estimator::PerspectiveNPointFEstimator<estimator::solver::P4PfSolver, // The solver used for fitting a model to a minimal sample
+			estimator::solver::PnPfBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
+			P4PfEstimator;
+			
+		typedef estimator::PerspectiveNPointFEstimator<estimator::solver::P35PfSolver, // The solver used for fitting a model to a minimal sample
+			estimator::solver::PnPfBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
+			P35PfEstimator;
+
+		typedef estimator::PerspectiveNPointFEstimator<estimator::solver::UP3PfSolver, // The solver used for fitting a model to a minimal sample
+			estimator::solver::PnPfBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
+			UP3PfEstimator;
+
+		typedef estimator::PerspectiveNPointFEstimator<estimator::solver::UP1PfACSolver, // The solver used for fitting a model to a minimal sample
+			estimator::solver::PnPfBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
+			UP1PfACEstimator;
+
+		typedef estimator::PerspectiveNPointFEstimator<estimator::solver::UP2PfOriSolver, // The solver used for fitting a model to a minimal sample
+			estimator::solver::PnPfBundleAdjustment> // The solver used for fitting a model to a non-minimal sample
+			UP2PfOriEstimator;
 
 		// The default estimator for PnP fitting
 		typedef estimator::RigidTransformationEstimator<estimator::solver::RigidTransformationSVDBasedSolver, // The solver used for fitting a model to a minimal sample

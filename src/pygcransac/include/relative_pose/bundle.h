@@ -136,6 +136,14 @@ int refine_pnp(const cv::Mat &correspondences_,
                     const BundleOptions &opt = BundleOptions(),
                     const double *weights = nullptr);
 
+int refine_pnpf(const cv::Mat &correspondences_,
+                const size_t *sample_,
+                const size_t &sample_size_,
+                CameraPose *pose,
+                double *focal_length,
+                const BundleOptions &opt = BundleOptions(),
+                const double *weights = nullptr);
+
 // Relative pose refinement. Minimizes Sampson error error. Assumes identity intrinsics (calibrated camera)
 // Returns number of iterations.
 int refine_relpose(const cv::Mat &correspondences_,
@@ -161,6 +169,8 @@ int refine_homography(const cv::Mat &correspondences_,
                       Eigen::Matrix3d *H,
                       const BundleOptions &opt = BundleOptions(),
                       const double *weights = nullptr);
+
+
 
 } // namespace pose_lib
 

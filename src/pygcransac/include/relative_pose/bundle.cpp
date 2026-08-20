@@ -3,6 +3,7 @@
 #include "robust_loss.h"
 #include "colmap_models.h"
 #include <opencv2/core.hpp>
+#include <Eigen/Geometry>
 
 namespace pose_lib {
 
@@ -95,6 +96,68 @@ int lm_pnp_impl(const JacobianAccumulator &accum,
         }
     }
 
+    return iter;
+}
+
+template <typename JacobianAccumulator>
+int lm_pnpf_impl(const JacobianAccumulator &accum, 
+                 CameraPose *pose, double *focal, 
+                 const BundleOptions &opt) 
+{
+    Eigen::Matrix<double, 7, 7> JtJ;
+    Eigen::Matrix<double, 7, 1> Jtr;
+    double lambda = opt.initial_lambda;
+    double cost = accum.residual(*pose, *focal);
+    bool recompute_jac = true;
+
+    int iter;
+    for (iter = 0; iter < opt.max_iterations; ++iter) {
+        if (recompute_jac) {
+            JtJ.setZero();
+            Jtr.setZero();
+            if (accum.accumulate(*pose, *focal, JtJ, Jtr) < 4) {
+                break;
+            }
+            if (Jtr.norm() < opt.gradient_tol)  {
+                break;
+            }
+        }
+
+        // Levenberg-Marquardt damping
+        Eigen::Matrix<double, 7, 7> H = JtJ;
+        for (int i = 0; i < 7; ++i) H(i, i) += lambda * std::max(1e-6, JtJ(i, i));
+
+        Eigen::Matrix<double, 7, 1> sol = H.ldlt().solve(-Jtr);
+        if (sol.norm() < opt.step_tol) {
+            break;
+        }
+        
+        CameraPose pose_new;
+        Eigen::Matrix3d R = pose->R();
+        Eigen::Vector3d w = sol.head<3>();
+        if (w.norm() > 1e-12) {
+            pose_new.q = pose_new.rotmat_to_quat(R * Eigen::AngleAxisd(w.norm(), w.stableNormalized()).toRotationMatrix());
+        }
+        pose_new.t = pose->t + R * sol.block<3, 1>(3, 0);
+        double focal_new = std::max(0.05, *focal + sol(6));
+
+        double cost_new = accum.residual(pose_new, focal_new);
+
+        if (cost_new < cost) {
+            *pose = pose_new;
+            *focal = focal_new;
+            cost = cost_new;
+            lambda /= 10.0;
+            recompute_jac = true;
+        } else {
+            for (int i = 0; i < 7; ++i) H(i, i) -= lambda * std::max(1e-6, JtJ(i, i));
+            lambda *= 10.0;
+            recompute_jac = false;
+            if (lambda > 1e10) {
+                break; 
+            }
+        }
+    }
     return iter;
 }
 
@@ -649,5 +712,50 @@ int refine_pnp(
     default:
         return -1;
     }
+}
+
+template <typename LossFunction>
+int refine_pnpf(
+    const cv::Mat &correspondences_,
+    const size_t *sample_,
+    const size_t &sample_size_, 
+    CameraPose *pose,
+    double *focal_length,
+    const BundleOptions &opt,
+    const double *weights)
+{                                      
+    LossFunction loss_fn(opt.loss_scale);                                                              
+    CameraFJacobianAccumulator<LossFunction> accum(
+        correspondences_, sample_, sample_size_, loss_fn, weights);
+
+    return lm_pnpf_impl<decltype(accum)>(accum, pose, focal_length, opt);          
+}
+
+int refine_pnpf(
+    const cv::Mat &correspondences_,
+    const size_t *sample_,
+    const size_t &sample_size_, 
+    CameraPose *pose,
+    double *focal_length,
+    const BundleOptions &opt,
+    const double *weights) 
+{
+    // 1. Define the handler macro
+    #define SWITCH_LOSS_FUNCTION_CASE(LossType, LossClassName) \
+        case LossType:      \
+            return refine_pnpf<LossClassName>(                     \
+                correspondences_, sample_, sample_size_, pose, focal_length, opt, weights);
+
+    // 2. Perform the switch
+    switch (opt.loss_type) {
+        SWITCH_LOSS_FUNCTION_CASE(BundleOptions::LossType::TRIVIAL, TrivialLoss)
+        SWITCH_LOSS_FUNCTION_CASE(BundleOptions::LossType::HUBER, HuberLoss)
+        SWITCH_LOSS_FUNCTION_CASE(BundleOptions::LossType::CAUCHY, CauchyLoss)
+        SWITCH_LOSS_FUNCTION_CASE(BundleOptions::LossType::TRUNCATED, TruncatedLoss)
+    default:
+        fprintf(stderr, "INVALID LOSS TYPE");
+        return -1;
+    }
+    #undef SWITCH_LOSS_FUNCTION_CASE
 }
 } // namespace pose_lib

@@ -7,6 +7,7 @@
 
 #include "problem_instances/findRigidTransform_t.hpp"
 #include "problem_instances/find6DPose_t.hpp"
+#include "problem_instances/find6DPoseF_t.hpp"
 #include "problem_instances/findLine2D_t.hpp"
 #include "problem_instances/findFundamentalMatrix_t.hpp"
 #include "problem_instances/findEssentialMatrix_t.hpp"
@@ -107,19 +108,22 @@ py::tuple find6DPoseSIFT(
 	bool use_sprt,
 	double min_inlier_ratio_for_sprt,
 	int sampler,
-	int solver,
 	int neighborhood,
 	double neighborhood_size,
 	int lo_number,
-	double sampler_variance)
+	double sampler_variance,
+	int solver)
 {
 	const size_t POSE_6DSIFT_DIM = 12;
+	const size_t POSE_6DSIFT_DIM_UP = 34;
 	py::buffer_info buf1 = x1y1x2y2z2nxnynza11a12a21a22_.request();
 	size_t NUM_TENTS = buf1.shape[0];
 	size_t DIM = buf1.shape[1];
 
-	if (DIM != POSE_6DSIFT_DIM)
-		throw std::invalid_argument("x1y1x2y2z2nxnynza11a12a21a22 should be an array with dims [n,12], n>=1");
+	if (solver < 3 && DIM != POSE_6DSIFT_DIM)
+		throw std::invalid_argument("x1y1x2y2z2nxnynza11a12a21a22 should be an array with dims [n,12], n>=1 for modes [0,1,2]");
+	if (solver == 3 && DIM != POSE_6DSIFT_DIM_UP)
+		throw std::invalid_argument("x1y1x2y2z2nxnynza11a12a21a22|Rxz|R_q|T_q should be an array with dims [n,33], n>=1 for modes [3]");
 	if (NUM_TENTS < 4) 
 		throw std::invalid_argument("x1y1x2y2z2nxnynza11a12a21a22 should be an array with dims [n,12], n>=1");
 
@@ -181,12 +185,32 @@ py::tuple find6DPoseSIFT(
 			lo_number,
 			false);
 	else if (solver == 2)
-		num_inl = find6DPose_<utils::ACP1PEstimator>(
+		num_inl = find6DPose_<utils::ACP1PEstimator_C>(
 			x1y1x2y2z2nxnynza11a12a21a22,
 			probabilities,
 			inliers,
 			pose,
 			POSE_6DSIFT_DIM,
+			spatial_coherence_weight,
+			threshold,
+			conf,
+			max_iters,
+			min_iters,
+			use_sprt,
+			min_inlier_ratio_for_sprt,
+			sampler,
+			neighborhood,
+			neighborhood_size,
+			sampler_variance,
+			lo_number,
+			false);
+	else if (solver == 3)
+		num_inl = find6DPose_<utils::UP1SIFTEstimator>(
+			x1y1x2y2z2nxnynza11a12a21a22,
+			probabilities,
+			inliers,
+			pose,
+			POSE_6DSIFT_DIM_UP,
 			spatial_coherence_weight,
 			threshold,
 			conf,
@@ -209,13 +233,181 @@ py::tuple find6DPoseSIFT(
 	for (size_t i = 0; i < NUM_TENTS; i++)
 		ptr3[i] = inliers[i];
 	if (num_inl == 0) 
-		return py::make_tuple(pybind11::cast<pybind11::none>(Py_None), inliers_);
+		return py::make_tuple(pybind11::cast<pybind11::none>(Py_None), inliers_, num_inl);
 	py::array_t<double> pose_ = py::array_t<double>({ 3,4 });
 	py::buffer_info buf2 = pose_.request();
 	double *ptr2 = (double *)buf2.ptr;
 	for (size_t i = 0; i < 12; i++)
 		ptr2[i] = pose[i];
-	return py::make_tuple(pose_, inliers_);
+	return py::make_tuple(pose_, inliers_, num_inl);
+}
+
+py::tuple find6DPoseF(
+	py::array_t<double>  x1y1x2y2z2_,
+	py::array_t<double>  probabilities_,
+	double threshold,
+	double conf,
+	double spatial_coherence_weight,
+	int max_iters,
+	int min_iters,
+	bool use_sprt,
+	double min_inlier_ratio_for_sprt,
+	int sampler,
+	int neighborhood,
+	double neighborhood_size,
+	int lo_number,
+	double sampler_variance,
+	int solver)
+{
+	const size_t POSE_6DF_DIM = 5;
+	const size_t POSE_6DF_DIM_U3 = 14;
+	const size_t POSE_6DF_DIM_UP = 34;
+	py::buffer_info buf1 = x1y1x2y2z2_.request();
+	size_t NUM_TENTS = buf1.shape[0];
+	size_t DIM = buf1.shape[1];
+
+	if (solver < 2 && DIM != POSE_6DF_DIM) {
+		throw std::invalid_argument("x1y1x2y2z2 should be an array with dims [n,5]");
+	}
+	if ((solver == 2) && (DIM != POSE_6DF_DIM_U3)) {
+		throw std::invalid_argument("x1y1x2y2z2 should be an array with dims [n,14]");
+	}
+	if ((solver >= 3) && (DIM != POSE_6DF_DIM_UP)) {
+		throw std::invalid_argument("x1y1x2y2z2 should be an array with dims [n,34]");
+	}
+	if (NUM_TENTS < 4) {
+		throw std::invalid_argument("x1y1x2y2z2 should be an array with dims [n,-], n>=4");
+	}
+
+	double *ptr1 = (double *)buf1.ptr;
+	std::vector<double> x1y1x2y2z2;
+	x1y1x2y2z2.assign(ptr1, ptr1 + buf1.size);
+
+    std::vector<double> probabilities;
+    if (sampler == 3 || sampler == 4)
+    {
+        py::buffer_info buf_prob = probabilities_.request();
+        double* ptr_prob = (double*)buf_prob.ptr;
+        probabilities.assign(ptr_prob, ptr_prob + buf_prob.size);        
+    }
+
+	std::vector<double> poseF(13);
+	std::vector<bool> inliers(NUM_TENTS);
+	int num_inl;
+	if (solver == 0)
+		num_inl = find6DPoseF_<utils::P4PfEstimator>(
+			x1y1x2y2z2,
+			probabilities,
+			inliers,
+			poseF,
+			POSE_6DF_DIM,
+			spatial_coherence_weight,
+			threshold,
+			conf,
+			max_iters,
+			min_iters,
+			use_sprt,
+			min_inlier_ratio_for_sprt,
+			sampler,
+			neighborhood,
+			neighborhood_size,
+			sampler_variance,
+			lo_number);
+	else if (solver == 1)
+		num_inl = find6DPoseF_<utils::P35PfEstimator>(
+			x1y1x2y2z2,
+			probabilities,
+			inliers,
+			poseF,
+			POSE_6DF_DIM,
+			spatial_coherence_weight,
+			threshold,
+			conf,
+			max_iters,
+			min_iters,
+			use_sprt,
+			min_inlier_ratio_for_sprt,
+			sampler,
+			neighborhood,
+			neighborhood_size,
+			sampler_variance,
+			lo_number);
+	else if (solver == 2)
+		num_inl = find6DPoseF_<utils::UP3PfEstimator>(
+			x1y1x2y2z2,
+			probabilities,
+			inliers,
+			poseF,
+			POSE_6DF_DIM_U3,
+			spatial_coherence_weight,
+			threshold,
+			conf,
+			max_iters,
+			min_iters,
+			use_sprt,
+			min_inlier_ratio_for_sprt,
+			sampler,
+			neighborhood,
+			neighborhood_size,
+			sampler_variance,
+			lo_number);
+	else if (solver == 3)
+		num_inl = find6DPoseF_<utils::UP1PfACEstimator>(
+			x1y1x2y2z2,
+			probabilities,
+			inliers,
+			poseF,
+			POSE_6DF_DIM_UP,
+			spatial_coherence_weight,
+			threshold,
+			conf,
+			max_iters,
+			min_iters,
+			use_sprt,
+			min_inlier_ratio_for_sprt,
+			sampler,
+			neighborhood,
+			neighborhood_size,
+			sampler_variance,
+			lo_number);
+	else if (solver == 4)
+		num_inl = find6DPoseF_<utils::UP2PfOriEstimator>(
+			x1y1x2y2z2,
+			probabilities,
+			inliers,
+			poseF,
+			POSE_6DF_DIM_UP,
+			spatial_coherence_weight,
+			threshold,
+			conf,
+			max_iters,
+			min_iters,
+			use_sprt,
+			min_inlier_ratio_for_sprt,
+			sampler,
+			neighborhood,
+			neighborhood_size,
+			sampler_variance,
+			lo_number);
+	else
+		throw std::invalid_argument("Unrecognized solver. Allowed: [0, 1, 2, 3, 4]");
+	
+	py::array_t<bool> inliers_ = py::array_t<bool>(NUM_TENTS);
+	py::buffer_info buf3 = inliers_.request();
+	bool *ptr3 = (bool *)buf3.ptr;
+	for (size_t i = 0; i < NUM_TENTS; i++)
+		ptr3[i] = inliers[i];
+	if (num_inl == 0) {
+		return py::make_tuple(pybind11::cast<pybind11::none>(Py_None), -1, inliers_, num_inl);
+	}
+	py::array_t<double> pose_ = py::array_t<double>({ 3,4 });
+	double focal_len;
+	py::buffer_info buf2 = pose_.request();
+	double *ptr2 = (double *)buf2.ptr;
+	for (size_t i = 0; i < 12; i++)
+		ptr2[i] = poseF[i];
+	focal_len = poseF[12];
+	return py::make_tuple(pose_, focal_len, inliers_, num_inl);
 }
 
 py::tuple find6DPose(
@@ -232,18 +424,23 @@ py::tuple find6DPose(
 	int neighborhood,
 	double neighborhood_size,
 	int lo_number,
-	double sampler_variance)
+	double sampler_variance,
+	int solver)
 {
 	const size_t POSE_6D_DIM = 5;
+	const size_t POSE_6D_DIM_UP2P = 14;
 	py::buffer_info buf1 = x1y1x2y2z2_.request();
 	size_t NUM_TENTS = buf1.shape[0];
 	size_t DIM = buf1.shape[1];
 
-	if (DIM != POSE_6D_DIM) {
-		throw std::invalid_argument("x1y1x2y2z2 should be an array with dims [n,5], n>=4");
+	if (solver < 2 && DIM != POSE_6D_DIM) {
+		throw std::invalid_argument("x1y1x2y2z2 should be an array with dims [n,5], n>=2,4");
+	}
+	if (solver == 2 && DIM != POSE_6D_DIM_UP2P) {
+		throw std::invalid_argument("x1y1x2y2z2Rxz should be an array with dims [n,14], n>=2");
 	}
 	if (NUM_TENTS < 4) {
-		throw std::invalid_argument("x1y1x2y2z2 should be an array with dims [n,5], n>=4");
+		throw std::invalid_argument("x1y1x2y2z2 should be an array with dims, n>=2,4");
 	}
 
 	double *ptr1 = (double *)buf1.ptr;
@@ -260,26 +457,70 @@ py::tuple find6DPose(
 
 	std::vector<double> pose(12);
 	std::vector<bool> inliers(NUM_TENTS);
+	int num_inl = 0;
 
-	int num_inl = find6DPose_<utils::DefaultPnPEstimator>(
-		x1y1x2y2z2,
-		probabilities,
-		inliers,
-		pose,
-		POSE_6D_DIM,
-		spatial_coherence_weight,
-		threshold,
-		conf,
-		max_iters,
-		min_iters,
-		use_sprt,
-		min_inlier_ratio_for_sprt,
-		sampler,
-		neighborhood,
-		neighborhood_size,
-		sampler_variance,
-		lo_number,
-		true);
+	if (solver == 0)
+		num_inl = find6DPose_<utils::DefaultPnPEstimator>(
+			x1y1x2y2z2,
+			probabilities,
+			inliers,
+			pose,
+			POSE_6D_DIM,
+			spatial_coherence_weight,
+			threshold,
+			conf,
+			max_iters,
+			min_iters,
+			use_sprt,
+			min_inlier_ratio_for_sprt,
+			sampler,
+			neighborhood,
+			neighborhood_size,
+			sampler_variance,
+			lo_number,
+			false);
+	else if (solver == 1)
+		num_inl = find6DPose_<utils::UP2PEstimator>(
+			x1y1x2y2z2,
+			probabilities,
+			inliers,
+			pose,
+			POSE_6D_DIM,
+			spatial_coherence_weight,
+			threshold,
+			conf,
+			max_iters,
+			min_iters,
+			use_sprt,
+			min_inlier_ratio_for_sprt,
+			sampler,
+			neighborhood,
+			neighborhood_size,
+			sampler_variance,
+			lo_number,
+			false);
+	else if (solver == 2)
+		num_inl = find6DPose_<utils::UP2PEEstimator>(
+			x1y1x2y2z2,
+			probabilities,
+			inliers,
+			pose,
+			POSE_6D_DIM_UP2P,
+			spatial_coherence_weight,
+			threshold,
+			conf,
+			max_iters,
+			min_iters,
+			use_sprt,
+			min_inlier_ratio_for_sprt,
+			sampler,
+			neighborhood,
+			neighborhood_size,
+			sampler_variance,
+			lo_number,
+			false);
+	else
+		throw std::invalid_argument("Unrecognized solver. Allowed: [0, 1]");
 
 	py::array_t<bool> inliers_ = py::array_t<bool>(NUM_TENTS);
 	py::buffer_info buf3 = inliers_.request();
@@ -287,14 +528,14 @@ py::tuple find6DPose(
 	for (size_t i = 0; i < NUM_TENTS; i++)
 		ptr3[i] = inliers[i];
 	if (num_inl == 0) {
-		return py::make_tuple(pybind11::cast<pybind11::none>(Py_None), inliers_);
+		return py::make_tuple(pybind11::cast<pybind11::none>(Py_None), inliers_, 0);
 	}
 	py::array_t<double> pose_ = py::array_t<double>({ 3,4 });
 	py::buffer_info buf2 = pose_.request();
 	double *ptr2 = (double *)buf2.ptr;
 	for (size_t i = 0; i < 12; i++)
 		ptr2[i] = pose[i];
-	return py::make_tuple(pose_, inliers_);
+	return py::make_tuple(pose_, inliers_, num_inl);
 }
 
 py::tuple findFundamentalMatrix(
@@ -1032,10 +1273,9 @@ py::tuple findHomography(py::array_t<double>  correspondences_,
 
     return py::make_tuple(H_,inliers_);
 }
+PYBIND11_PLUGIN(pygcransac) {
 
-PYBIND11_MODULE(pygcransac, m) {
-
-    m.doc() = R"doc(
+    py::module m("pygcransac", R"doc(
         Python module
         -----------------------
         .. currentmodule:: pygcransac
@@ -1043,13 +1283,17 @@ PYBIND11_MODULE(pygcransac, m) {
            :toctree: _generate
 
            findFundamentalMatrix,
-			findLine2D,
-			findHomography,
+		   findLine2D,
+		   findHomography,
 		   find6DPose,
+		   find6DPoseF,
+		   find6DPoseSIFT,
 		   findEssentialMatrix,
+		   findPlanarEssentialMatrix,
+		   findGravityEssentialMatrix,
 		   findRigidTransform,
 
-    )doc";
+    )doc");
 
 	m.def("findFundamentalMatrix", &findFundamentalMatrix, R"doc(some doc)doc",
         py::arg("correspondences"),
@@ -1120,7 +1364,25 @@ PYBIND11_MODULE(pygcransac, m) {
 		py::arg("neighborhood") = 0,
 		py::arg("neighborhood_size") = 8.0,
 		py::arg("lo_number") = 50,
-		py::arg("sampler_variance") = 0.1);
+		py::arg("sampler_variance") = 0.1,
+		py::arg("solver") = 0);
+
+	m.def("find6DPoseF", &find6DPoseF, R"doc(some doc)doc",
+        py::arg("correspondences"),
+        py::arg("probabilities"),
+		py::arg("threshold") = 0.001,
+		py::arg("conf") = 0.99,
+		py::arg("spatial_coherence_weight") = 0.975,
+		py::arg("max_iters") = 10000,
+		py::arg("min_iters") = 50,
+		py::arg("use_sprt") = true,
+		py::arg("min_inlier_ratio_for_sprt") = 0.00001,
+		py::arg("sampler") = 1,
+		py::arg("neighborhood") = 0,
+		py::arg("neighborhood_size") = 8.0,
+		py::arg("lo_number") = 50,
+		py::arg("sampler_variance") = 0.1,
+		py::arg("solver") = 0);
 
 	m.def("find6DPoseSIFT", &find6DPoseSIFT, R"doc(some doc)doc",
         py::arg("correspondences"),
@@ -1133,11 +1395,11 @@ PYBIND11_MODULE(pygcransac, m) {
 		py::arg("use_sprt") = true,
 		py::arg("min_inlier_ratio_for_sprt") = 0.00001,
 		py::arg("sampler") = 1,
-		py::arg("solver") = 0,
 		py::arg("neighborhood") = 0,
 		py::arg("neighborhood_size") = 8.0,
 		py::arg("lo_number") = 50,
-		py::arg("sampler_variance") = 0.1);
+		py::arg("sampler_variance") = 0.1,
+		py::arg("solver") = 0);
 
     m.def("findEssentialMatrix", &findEssentialMatrix, R"doc(some doc)doc",
         py::arg("correspondences"),
@@ -1227,4 +1489,6 @@ PYBIND11_MODULE(pygcransac, m) {
 		py::arg("lo_number") = 50,
 		py::arg("sampler_variance") = 0.1,
 		py::arg("solver") = 0);
+
+  return m.ptr();
 }

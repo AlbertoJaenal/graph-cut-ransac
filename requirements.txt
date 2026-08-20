@@ -1,0 +1,2 @@
+-e git+https://github.com/cvg/Hierarchical-Localization.git@c13273bd0ecc2917a35910fd843712a1c6243193#egg=hloc
+open3d
