@@ -184,16 +184,15 @@ class S3Esti:
         patch_tensor = point2patch(patch_coord, img, patch_size)
 
         # Filter out zero patches
-        patch_ = [torch.empty(0, patch_tensor.shape[2], patch_tensor.shape[3])]
+        patch_ = [torch.empty(0, patch_tensor.shape[2], patch_tensor.shape[3], device=patch_tensor.device)]
         for p in patch_tensor[0]:
             if not (p == 0).all():
                 patch_.append(p.unsqueeze(0))
 
         patch_ = torch.cat(patch_, dim=0)
-        if torch.cuda.is_available():
-            patch_ = patch_.cuda()
 
         return patch_
+
     def add_scale_oris(self, data, pred):
         """Estimate scale and orientation for detected keypoints.
         

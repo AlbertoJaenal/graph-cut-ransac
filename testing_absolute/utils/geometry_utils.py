@@ -73,4 +73,3 @@ def normal_redirect(points, normals, view_point):
     redirected_normals = normals.copy()
     redirected_normals[mask] *= -1.
     return redirected_normals
-    return rot
