@@ -1,6 +1,6 @@
 <div align="center">
 <h1>GC-RANSAC implementation of Gravity-aware partially calibrated absolute <br> pose estimation from affine- or <br> rotation-covariant features</h1>
-<a href="_blank"><img src="https://arxiv.org/abs/2608.20056" alt="Paper"></a>
+<a href="https://arxiv.org/abs/2608.20056"><img src="https://img.shields.io/badge/Paper-blue" alt="Paper"></a>
 <a href="https://marcusvaltonen.github.io/eccv2026/"><img src="https://img.shields.io/badge/Project_Page-green" alt="Project Page"></a>
 <br>
 <br>
