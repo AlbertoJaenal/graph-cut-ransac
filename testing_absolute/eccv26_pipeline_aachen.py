@@ -137,7 +137,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=DATA_DIR + "/aachen",
+        default=DATA_DIR + "/aachen_v1_1",
         help="Path to the dataset, default: %(default)s",
     )
     parser.add_argument(

@@ -202,6 +202,10 @@ if __name__ == "__main__":
             Solvers.UP2PFORI,
         ]:
             print(f'Working on scene "{scene}" with {solver}')
+
+            if not (args.outputs / scene / "output").exists():
+                os.makedirs(args.outputs / scene / "output", exist_ok=True)
+                
             for times_i in range(args.times):
                 results = (args.outputs / scene / "output" /
                           f"out_poses_{args.feature}_{solver}_{times_i}.txt")
